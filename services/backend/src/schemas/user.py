@@ -9,6 +9,7 @@ from src.utils import LevelTypeEnum
 
 class UserCreate(BaseModel):
     tg_id: int
+    username: str
 
 
 class UserUpdate(BaseModel):
@@ -19,6 +20,7 @@ class UserUpdate(BaseModel):
 class UserRead(BaseModel):
     id: int
     tg_id: int
+    username: str
     session_id: str
     level: LevelTypeEnum
     created_at: datetime
@@ -28,8 +30,8 @@ class UserRead(BaseModel):
 
 
 class MessageCreate(BaseModel):
-    user_id: int
-    text_corrected: str
+    tg_id: int
+    text_original: str
 
 
 class MessageRead(BaseModel):
@@ -38,6 +40,7 @@ class MessageRead(BaseModel):
     text_original: str
     text_corrected: str
     explanation: str
+    answer: str
     created_at: datetime
 
     model_config = {'from_attributes': True}

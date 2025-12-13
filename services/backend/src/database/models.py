@@ -21,6 +21,7 @@ class Users(Base):
 
     id = Column(Integer, primary_key=True)
     tg_id = Column(BigInteger, unique=True, index=True, nullable=False)
+    username = Column(String)
     session_id = Column(String, default='')
     level = Column(Enum(LevelTypeEnum), default=LevelTypeEnum.a2)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -44,6 +45,7 @@ class Messages(Base):
     text_original = Column(Text)
     text_corrected = Column(Text)
     explanation = Column(Text)
+    answer = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship('Users', back_populates='messages')
