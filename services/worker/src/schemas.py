@@ -9,7 +9,7 @@ class ChatMessage(BaseModel):
 
 
 class Meta(BaseModel):
-    level: Literal["A1", "A2", "B1", "B2", "C1", "C2"] | None
+    level: Literal["A1", "A2", "B1", "B2", "C1", "C2"] | None = "A2"
     platform: Literal["telegram", "web"]
 
 
@@ -22,19 +22,19 @@ class ReplyRequest(BaseModel):
 
 
 class ReplyResponse(BaseModel):
-    user_id: str
+    # user_id: str
     reply: str
     meta: dict | None = None
 
 
 class FeedbackItem(BaseModel):
     user_text: str
-    error_type: Literal['grammar', 'vocabulary', 'word_order', 'spelling', 'punctuation', 'style', 'other']
+    error_type: Literal['grammar', 'spelling', 'punctuation', 'style']
     explanation: str
     suggested_corrected: str | None
 
 
-class LanguageFeedback:
+class LanguageFeedback(BaseModel):
     items: List[FeedbackItem]
     overall_coment: str
 
@@ -43,4 +43,8 @@ class FeedbackRequest(BaseModel):
     session_id: str
     message: str
     meta: Meta | None = None
+
+class FeedbackResponse(BaseModel):
+    language_feedback: LanguageFeedback
+    meta: dict | None = None
 
