@@ -9,10 +9,9 @@ from dispatcher import setup_dispatcher
 
 
 async def main() -> None:
-    logger = setup_logging()
-    settings = load_settings()
-
-    bot = await setup_bot(logger, settings)
+    setup_logging()
+    load_settings
+    bot = await setup_bot()
     await setup_dispatcher(bot)
 
 

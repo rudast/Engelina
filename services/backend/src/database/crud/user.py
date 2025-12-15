@@ -48,3 +48,10 @@ async def create_message(
         await session.commit()
         await session.refresh(msg)
         return msg
+
+
+async def get_list_of_users() -> list[int]:
+    async with async_session() as session:
+        q = select(Users.tg_id)
+        res = await session.execute(q)
+        return res.scalars().all()

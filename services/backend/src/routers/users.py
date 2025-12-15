@@ -3,8 +3,10 @@ from __future__ import annotations
 from fastapi import APIRouter
 from src.database.crud.user import create_message
 from src.database.crud.user import create_user
+from src.database.crud.user import get_list_of_users
 from src.database.crud.user import get_user_by_id
 from src.database.crud.user import get_user_id_by_tg_id
+from src.schemas.user import GetUsers
 from src.schemas.user import MessageCreate
 from src.schemas.user import MessageRead
 from src.schemas.user import UserCreate
@@ -33,5 +35,17 @@ async def send_message(message: MessageCreate):
     # TODO request to worker
     # TODO get corrected, explained text, answer
 
-    msg = await create_message(user_id, message.text_original, '# TODO corrected', '# TODO explanation', '# TODO answer')
+    if user_id is None:
+        return
+
+    msg = await create_message(
+        user_id, message.text_original, '# TODO corrected',
+        '# TODO explanation', '# TODO answer',
+    )
     return msg
+
+
+@router.get('/get_users', response_model=GetUsers)
+async def get_users():
+    users = await get_list_of_users()
+    return GetUsers(users=users)

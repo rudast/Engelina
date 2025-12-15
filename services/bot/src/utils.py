@@ -28,13 +28,15 @@ async def post_response(url: str, data: dict, msg: Message) -> None | dict:
 
     except aiohttp.ClientError:
         await send_error_msg(msg)
-        logging.getLogger(__name__).error(f'Server error.')
+        logging.getLogger(__name__).error('Server error.')
     except asyncio.TimeoutError:
         await send_error_msg(msg)
-        logging.getLogger(__name__).error(f'Timeout error.')
+        logging.getLogger(__name__).error('Timeout error.')
     except Exception:
         await send_error_msg(msg)
-        logging.getLogger(__name__).error(f'Unknow error.')
+        logging.getLogger(__name__).error('Unknow error.')
+
+    return None
 
 
 async def send_error_msg(msg: Message) -> None:
@@ -43,3 +45,31 @@ async def send_error_msg(msg: Message) -> None:
         ⚠️ Oops! Engelina is currently unavailable.
         Please try again later.''',
     )
+    return None
+
+
+async def get_response(url: str) -> None | dict:
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                url,
+                timeout=5,
+            ) as resp:
+
+                if resp.status != 200:
+                    logging.getLogger(__name__).error(
+                        f'Responce error. Status: {resp.status}',
+                    )
+                    return None
+
+                data = await resp.json()
+                return dict(data)
+
+    except aiohttp.ClientError:
+        logging.getLogger(__name__).error('Server error.')
+    except asyncio.TimeoutError:
+        logging.getLogger(__name__).error('Timeout error.')
+    except Exception:
+        logging.getLogger(__name__).error('Unknow error.')
+
+    return None

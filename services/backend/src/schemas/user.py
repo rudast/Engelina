@@ -63,3 +63,7 @@ class ErrorRead(BaseModel):
     corrected: str
 
     model_config = {'from_attributes': True}
+
+
+class GetUsers(BaseModel):
+    users: list[int]

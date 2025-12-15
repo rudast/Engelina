@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-import aiohttp
+from aiogram import F
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.filters import CommandStart
+from aiogram.types import CallbackQuery
 from aiogram.types import Message
+from buttons.user import rate_beyboard
 from utils import post_response
 
 
@@ -13,7 +15,7 @@ router = Router()
 
 @router.message(CommandStart())
 async def start_cmd(msg: Message):
-    await post_response(
+    res = await post_response(
         url='http://backend:8000/users/start',
         data={
             'tg_id': msg.from_user.id,
@@ -21,6 +23,9 @@ async def start_cmd(msg: Message):
         },
         msg=msg,
     )
+
+    if res is None:
+        return
 
     await msg.answer(
         '''
@@ -69,14 +74,15 @@ async def about_cmd(msg: Message):
         '''
         💡 About Engelina
 
-Engelina is an assistant created to help you track your progress, view statistics, and have simple, friendly conversations.
+Engelina is an assistant created to help you track your progress, \
+    view statistics, and have simple, friendly conversations.
 
 I'm always here to help — just send a message!
         ''',
     )
 
 
-@router.message()
+@router.message(F.text & ~F.text.startswith('/'))
 async def message(msg: Message):
     res = await post_response(
         url='http://backend:8000/users/message',
@@ -106,4 +112,16 @@ Corrected: {res['text_corrected']}
 Explanation: {res['explanation']}
         '''
 
-    await msg.reply(text)
+    await msg.reply(text, reply_markup=rate_beyboard)
+
+
+@router.callback_query(F.data == 'like_callback')
+async def process_like_btn(callback: CallbackQuery):
+    await callback.message.edit_reply_markup()
+    await callback.answer()
+
+
+@router.callback_query(F.data == 'dislike_callback')
+async def process_dislike_btn(callback: CallbackQuery):
+    await callback.message.edit_reply_markup()
+    await callback.answer()
