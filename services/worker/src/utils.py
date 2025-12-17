@@ -1,27 +1,33 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import time
 from dataclasses import dataclass
-from typing import Any, Iterable, Optional
-import logging
-import asyncio
+from typing import Any
 
 from pydantic import ValidationError
-
-from src.schemas import ChatMessage, LanguageFeedback, Meta
+from rq.job import Job
+from src.schemas import ChatMessage
+from src.schemas import LanguageFeedback
 
 log = logging.getLogger()
 
+
 def trim_text(text: str, max_chars: int) -> str:
     if max_chars <= 0:
-        return ""
+        return ''
     text = text.strip()
     if len(text) <= max_chars:
         return text
-    return text[:max_chars].rstrip() + "..."
+    return text[:max_chars].rstrip() + '...'
 
-def clamp_history_by_chars(history: list[ChatMessage], max_total_chars) -> list[ChatMessage]:
+
+def clamp_history_by_chars(
+        history: list[ChatMessage],
+        max_total_chars,
+) -> list[ChatMessage]:
     if max_total_chars <= 0:
         return []
     total = 0
@@ -35,19 +41,23 @@ def clamp_history_by_chars(history: list[ChatMessage], max_total_chars) -> list[
         total += ln
     return list(reversed(kept))
 
+
 @dataclass
 class Timer:
     start_ms: int
 
     @staticmethod
-    def start() -> "Timer":
+    def start() -> Timer:
         return Timer(start_ms=int(time.time() * 1000))
-    
+
     def elapsed_ms(self) -> int:
         return int(time.time() * 1000) - self.start_ms
-    
 
-def clamp_history(history: list[ChatMessage], max_turns: int) -> list[ChatMessage]:
+
+def clamp_history(
+        history: list[ChatMessage],
+        max_turns: int,
+) -> list[ChatMessage]:
     if max_turns <= 0:
         return []
     if len(history) <= max_turns:
@@ -58,71 +68,82 @@ def clamp_history(history: list[ChatMessage], max_turns: int) -> list[ChatMessag
 def extract_json_object(text: str) -> dict[str, Any]:
     """
     extract json from text
-    
+
     :param text: str
     :return: dict[str, Any]
 
-    Работает даже если текст вида "some text ... {...valid_json...} ... some text"
+    "some text ... {...valid_json...} ... some text"
     """
     if not text:
-        raise ValueError("Empty text")
-    
+        raise ValueError('Empty text')
+
     start = text.find('{')
     end = text.rfind('}')
 
     if start == -1 or end == -1 or end <= start:
-        raise ValueError("No JSON object boundaries found")
-    
+        raise ValueError('No JSON object boundaries found')
+
     candidate = text[start: end + 1].strip()
 
     try:
         return json.loads(candidate)
     except json.JSONDecodeError as e:
         raise ValueError(f"JSON decode failed: {e}") from e
-    
 
-def safe_parse_language_feedback(text: str) -> Optional[LanguageFeedback]:
+
+def safe_parse_language_feedback(text: str) -> LanguageFeedback | None:
     try:
         obj = extract_json_object(text)
 
-        lf = obj.get("language_feedback")
+        lf = obj.get('language_feedback')
         if lf is None:
-            log.error("No 'language_feedback' key in object. Keys=%s", list(obj.keys()))
+            log.error(
+                "No 'language_feedback' key in object. Keys=%s",
+                list(obj.keys()),
+            )
             return None
 
         try:
             return LanguageFeedback.model_validate(lf)
         except ValidationError as e:
-            log.error("LanguageFeedback validation failed:\n%s", e)
-            log.error("Bad payload was:\n%s", lf)
+            log.error('LanguageFeedback validation failed:\n%s', e)
+            log.error('Bad payload was:\n%s', lf)
             return None
 
     except Exception as e:
-        log.exception("Failed to parse JSON from model output: %s", e)
+        log.exception('Failed to parse JSON from model output: %s', e)
         return None
-    
 
-def fallback_language_feedback(reason: str = "Feedback temporarily unavailable.") -> LanguageFeedback:
+
+def fallback_language_feedback(
+        reason: str = 'Feedback temporarily unavailable.',
+) -> LanguageFeedback:
     """
     Create a safe feedback object
     """
     return LanguageFeedback(items=[], overall_comment=reason)
 
-async def wait_job_result(job: Job, *, timeout_s: int = 120, poll_s: float = 0.2):
+
+async def wait_job_result(
+        job: Job,
+        *,
+        timeout_s: int = 120,
+        poll_s: float = 0.2,
+):
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         job.refresh()
         status = job.get_status()
-        if status == "finished":
+        if status == 'finished':
             return job.result
-        if status == "failed":
-            raise RuntimeError((job.exc_info or "job failed")[-2000:])
+        if status == 'failed':
+            raise RuntimeError((job.exc_info or 'job failed')[-2000:])
         await asyncio.sleep(poll_s)
-    raise TimeoutError("job timeout")
+    raise TimeoutError('job timeout')
 
 # def get_level_from_meta(meta: Meta) -> Optional[str]:
 #     """
-#     Helper to safely extract 'level' from meta if meta may be None/dict/pydantic
+#     Helper to safely extract 'level'
 #     """
 
 #     if meta is None:

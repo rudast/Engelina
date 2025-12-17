@@ -1,21 +1,24 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Optional
-from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from pydantic_settings import BaseSettings
+from pydantic_settings import SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file='.env', env_file_encoding='utf-8',
+    )
 
-    REDIS_URL: str = "redis://redis:6379/0"
-    RQ_QUEUE_NAME: str = "ai_worker"
+    REDIS_URL: str = 'redis://redis:6379/0'
+    RQ_QUEUE_NAME: str = 'ai_worker'
     RQ_RESULT_TTL_S: int = 3600
 
-    LOG_LEVEL: str = "INFO"
+    LOG_LEVEL: str = 'INFO'
 
-    MODEL_ID: str = "Qwen/Qwen2.5-7B-Instruct"
-    DEVICE: Optional[str] = None
+    MODEL_ID: str = 'Qwen/Qwen2.5-7B-Instruct'
+    DEVICE: str | None = None
     LOAD_IN_4BIT: bool = True
 
     MAX_HISTORY_TURNS: int = 16
@@ -27,7 +30,6 @@ class Settings(BaseSettings):
     TEMPERATURE_REPLY: float = 0.6
     TEMPERATURE_FEEDBACK: float = 0.1
     TOP_P: float = 0.9
-
 
 
 @lru_cache(maxsize=1)

@@ -1,10 +1,10 @@
-from typing import Any, Dict, List, Optional
+from __future__ import annotations
 
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
-
-from src.settings import Settings, get_settings
-from src.utils import clamp_history
+from src.settings import Settings
+from transformers import AutoModelForCausalLM
+from transformers import AutoTokenizer
+from transformers import BitsAndBytesConfig
 
 
 class AIWorkerModel:
@@ -12,24 +12,25 @@ class AIWorkerModel:
     Loads and holds the LLM + tokenizer once per process.
     Provides two generation modes:
       - reply: natural conversation text
-      - feedback_raw: expects JSON text (may still fail -> parsed in service layer)
+      - feedback_raw: expects JSON text
     """
 
     def __init__(self, settings: Settings):
         self.settings = settings
         self.tokenizer = self._load_tokenizer()
-        self.model = self._load_model()
+        model = self._load_model()
+        self.model = model
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
-        if getattr(self.model.config, "pad_token_id", None) is None:
+        if getattr(self.model.config, 'pad_token_id', None) is None:
             self.model.config.pad_token_id = self.tokenizer.pad_token_id
-    
+
     def _load_tokenizer(self):
         tok = AutoTokenizer.from_pretrained(
             self.settings.MODEL_ID,
             use_fast=True,
         )
-        
+
         if tok.pad_token is None:
             tok.pad_token = tok.eos_token
         return tok
@@ -42,24 +43,24 @@ class AIWorkerModel:
         if self.settings.LOAD_IN_4BIT:
             if BitsAndBytesConfig is None:
                 raise RuntimeError(
-                    "BitsAndBytesConfig is not available."
+                    'BitsAndBytesConfig is not available.',
                 )
             bnb_config = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_use_double_quant=True,
-                bnb_4bit_quant_type="nf4",
+                bnb_4bit_quant_type='nf4',
                 bnb_4bit_compute_dtype=dtype,
             )
 
             model = AutoModelForCausalLM.from_pretrained(
                 model_id,
                 quantization_config=bnb_config,
-                device_map="auto",
+                device_map='auto',
                 torch_dtype=dtype,
             )
             return model
-        
-    def _build_chat_text(self, messages: List[Dict[str, str]]):
+
+    def _build_chat_text(self, messages: list[dict[str, str]]):
         """
         Convert chat messages into model specific chat template text.
         """
@@ -68,17 +69,18 @@ class AIWorkerModel:
             tokenize=False,
             add_generation_prompt=True,
         )
-        
-    def _encode(self, chat_text: str) -> Dict[str, torch.Tensor]:
+
+    def _encode(self, chat_text: str) -> dict[str, torch.Tensor]:
         """
         Encode text to tensors
         """
-        inputs = self.tokenizer(chat_text, return_tensors="pt")
+        inputs = self.tokenizer(chat_text, return_tensors='pt')
         return {k: v.to(self.model.device) for k, v in inputs.items()}
+
     @torch.no_grad()
     def _generate(
         self,
-        inputs: Dict[str, torch.Tensor],
+        inputs: dict[str, torch.Tensor],
         *,
         max_new_tokens: int,
         temperature: float,
@@ -94,33 +96,39 @@ class AIWorkerModel:
             top_p=top_p,
             pad_token_id=self.tokenizer.pad_token_id,
         )
-        
-    def _decode_new_tokens(self, output_ids: torch.Tensor, input_len: int) -> str:
+
+    def _decode_new_tokens(
+            self, output_ids: torch.Tensor,
+            input_len: int,
+    ) -> str:
         """
         Decode only new tokens
         """
         gen_ids = output_ids[0][input_len:]
-        return self.tokenizer.decode(
-            gen_ids,
-            skip_special_tokens=True,
-            clean_up_tokenization_spaces=True,
-        ).strip()
+        return self.tokenizer.\
+            decode(
+                gen_ids,
+                skip_special_tokens=True,
+                clean_up_tokenization_spaces=True,
+            ).strip()
 
     def generate_reply(
-            self, 
-            *, 
-            system_prompt: str, 
-            history: list[dict], 
-            user_message: str
-        ) -> str:
-        messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
+            self,
+            *,
+            system_prompt: str,
+            history: list[dict],
+            user_message: str,
+    ) -> str:
+        messages: list[dict[str, str]] = [
+            {'role': 'system', 'content': system_prompt},
+        ]
         messages.extend(history)
-        messages.append({"role": "user", "content": user_message})
+        messages.append({'role': 'user', 'content': user_message})
 
         chat_text = self._build_chat_text(messages)
         inputs = self._encode(chat_text)
 
-        input_len = inputs["input_ids"].shape[1]
+        input_len = inputs['input_ids'].shape[1]
         out_ids = self._generate(
             inputs,
             max_new_tokens=self.settings.MAX_NEW_TOKENS_REPLY,
@@ -128,7 +136,6 @@ class AIWorkerModel:
             top_p=self.settings.TOP_P,
         )
         return self._decode_new_tokens(out_ids, input_len)
-
 
     def generate_feedback_raw(
         self,
@@ -139,15 +146,15 @@ class AIWorkerModel:
         """
         Generate feedback output as raw text (expected to be JSON).
         """
-        messages: List[Dict[str, str]] = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
+        messages: list[dict[str, str]] = [
+            {'role': 'system', 'content': system_prompt},
+            {'role': 'user', 'content': user_message},
         ]
 
         chat_text = self._build_chat_text(messages)
         inputs = self._encode(chat_text)
 
-        input_len = inputs["input_ids"].shape[1]
+        input_len = inputs['input_ids'].shape[1]
         out_ids = self._generate(
             inputs,
             max_new_tokens=self.settings.MAX_NEW_TOKENS_FEEDBACK,

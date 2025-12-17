@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from redis import Redis
 from rq import Queue
-
 from src.settings import Settings
 
 
@@ -15,5 +14,5 @@ def get_queue(settings: Settings) -> Queue:
     return Queue(
         name=settings.RQ_QUEUE_NAME,
         connection=redis,
-        default_timeout=getattr(settings, "JOB_TIMEOUT_S", 1800),
+        default_timeout=getattr(settings, 'JOB_TIMEOUT_S', 1800),
     )
