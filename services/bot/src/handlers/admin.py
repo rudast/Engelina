@@ -17,6 +17,7 @@ from buttons.admin import admin_answer_btns
 from FSM.broadcast import BroadcastState
 from middlewares.admin import AdminMiddleware
 from utils import get_response
+from utils import send_error_msg
 
 
 router = Router()
@@ -24,9 +25,33 @@ router.message.middleware(AdminMiddleware())
 
 
 @router.message(Command('broadcast'))
-async def test(msg: Message, state: FSMContext):
+async def broadcast_cmd(msg: Message, state: FSMContext):
     await state.set_state(BroadcastState.wait_msg)
-    await msg.reply('Send me message to sending to all users.')
+    await msg.delete()
+    await msg.answer('Send me message to sending to all users.')
+
+
+@router.message(Command('admin_stats'))
+async def admin_stats_cmd(msg: Message):
+    data = await get_response('http://backend:8000/api/v1/admin/stats')
+    if data is None:
+        await send_error_msg(msg)
+        return
+
+    text = (
+        '<b>📊 Admin statistics</b>\n\n'
+        f"👥 Users: {data['total_users']} (online: {data['online_users']})\n"
+        f"💬 Messages total: {data['total_messages']}\n"
+        f"⚠️ Errors total: {data['total_errors']}\n"
+        f"🏆 Achievement types: {data['total_achievement_types']}\n"
+        f"🎖️ Achievements awarded: {data['total_awarded_achievements']}\n\n"
+        f"📅 Messages last 24h: {data['messages_last_24h']}\n"
+        f"🆕 New users last 24h: {data['new_users_last_24h']}\n"
+        f"📈 Avg messages per user: {data['avg_messages_per_user']}\n\n"
+        'Use /achievements to view user achievements.'
+    )
+    await msg.delete()
+    await msg.answer(text)
 
 
 @router.message(StateFilter(BroadcastState.wait_msg))
@@ -107,7 +132,7 @@ async def cb_bcast_confirm(
     is_media = data['is_media']
     admin_chat_id = callback.from_user.id
 
-    user_ids = await get_response('http://backend:8000/users/get_users')
+    user_ids = await get_response('http://backend:8000/api/v1/users')
     user_ids = list(user_ids['users'])
     logging.getLogger(__name__).info(user_ids)
 

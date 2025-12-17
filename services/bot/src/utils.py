@@ -16,7 +16,7 @@ async def post_response(url: str, data: dict, msg: Message) -> None | dict:
                 timeout=5,
             ) as resp:
 
-                if resp.status != 200:
+                if resp.status < 200 or resp.status >= 300:
                     await send_error_msg(msg)
                     logging.getLogger(__name__).error(
                         f'Responce error. Status: {resp.status}',
@@ -56,7 +56,7 @@ async def get_response(url: str) -> None | dict:
                 timeout=5,
             ) as resp:
 
-                if resp.status != 200:
+                if resp.status < 200 or resp.status >= 300:
                     logging.getLogger(__name__).error(
                         f'Responce error. Status: {resp.status}',
                     )

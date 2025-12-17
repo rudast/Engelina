@@ -1,51 +1,48 @@
 from __future__ import annotations
 
 from fastapi import APIRouter
-from src.database.crud.user import create_message
+from fastapi import Depends
+from fastapi import HTTPException
+from fastapi import status
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.crud.user import create_user
 from src.database.crud.user import get_list_of_users
 from src.database.crud.user import get_user_by_id
-from src.database.crud.user import get_user_id_by_tg_id
+from src.database.deps import get_session
 from src.schemas.user import GetUsers
-from src.schemas.user import MessageCreate
-from src.schemas.user import MessageRead
 from src.schemas.user import UserCreate
 from src.schemas.user import UserRead
 
 
-router = APIRouter()
+router = APIRouter(prefix='/api/v1/users', tags=['users'])
 
 
-@router.post('/start', response_model=UserRead)
-async def start_user(user: UserCreate):
-    db_user = await get_user_by_id(user.tg_id)
-    if not db_user:
-        db_user = await create_user(user.tg_id, user.username)
+@router.post('/', response_model=UserRead, status_code=status.HTTP_201_CREATED)
+async def create_user_endpoint(
+    user: UserCreate, session: AsyncSession =
+    Depends(get_session),
+):
+    try:
+        db_user = await get_user_by_id(session, user.tg_id)
+        if not db_user:
+            db_user = await create_user(session, user.tg_id, user.username)
 
-    return db_user
-
-
-@router.post('/message', response_model=MessageRead)
-async def send_message(message: MessageCreate):
-    user_id = await get_user_id_by_tg_id(message.tg_id)
-    if user_id is None:
-        await start_user(UserCreate(tg_id=message.tg_id))
-        user_id = await get_user_id_by_tg_id(message.tg_id)
-
-    # TODO request to worker
-    # TODO get corrected, explained text, answer
-
-    if user_id is None:
-        return
-
-    msg = await create_message(
-        user_id, message.text_original, '# TODO corrected',
-        '# TODO explanation', '# TODO answer',
-    )
-    return msg
+        return db_user
+    except SQLAlchemyError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail='Database not available.',
+        )
 
 
-@router.get('/get_users', response_model=GetUsers)
-async def get_users():
-    users = await get_list_of_users()
-    return GetUsers(users=users)
+@router.get('/', response_model=GetUsers, status_code=status.HTTP_200_OK)
+async def get_users_endpoint(session: AsyncSession = Depends(get_session)):
+    try:
+        users = await get_list_of_users(session)
+        return GetUsers(users=users)
+    except SQLAlchemyError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail='Database not available.',
+        )

@@ -29,23 +29,6 @@ class UserRead(BaseModel):
     model_config = {'from_attributes': True}
 
 
-class MessageCreate(BaseModel):
-    tg_id: int
-    text_original: str
-
-
-class MessageRead(BaseModel):
-    id: int
-    user_id: int
-    text_original: str
-    text_corrected: str
-    explanation: str
-    answer: str
-    created_at: datetime
-
-    model_config = {'from_attributes': True}
-
-
 class ErrorCreate(BaseModel):
     msg_id: int
     type: ErrorTypeEnum
@@ -66,4 +49,4 @@ class ErrorRead(BaseModel):
 
 
 class GetUsers(BaseModel):
-    users: list[int]
+    users: list[int] | None

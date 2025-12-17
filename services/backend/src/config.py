@@ -4,29 +4,27 @@ import logging
 import sys
 
 from pydantic import ValidationError
-from src.settings import DatabaseSettings
-from src.settings import LoggingSettings
+from src.settings import get_database_settings
+from src.settings import get_logging_settings
 
 
-def load_settings() -> DatabaseSettings:
+def load_settings() -> None:
     try:
-        settings = DatabaseSettings()
+        get_database_settings()
         logging.info('Successed to load URL from .env')
-        return settings
     except ValidationError:
         logging.critical('Failed to load URL .env')
         sys.exit(1)
 
 
-def setup_logging() -> logging.Logger:
+def setup_logging() -> None:
     try:
-        settings = LoggingSettings()
+        settings = get_logging_settings()
         logging.basicConfig(
             filename=settings.LOG_FILE,
             level=logging.INFO,
             format=settings.LOG_FORMAT,
         )
-        return logging.getLogger()
     except ValidationError:
         print('Failed to load logging data from .env')
         sys.exit(1)
