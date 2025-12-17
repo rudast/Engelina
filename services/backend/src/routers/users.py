@@ -9,9 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.crud.user import create_user
 from src.database.crud.user import get_list_of_users
 from src.database.crud.user import get_user_by_id
+from src.database.crud.user_level import get_user_by_username
+from src.database.crud.user_level import update_user_level_by_username
 from src.database.deps import get_session
 from src.schemas.user import GetUsers
 from src.schemas.user import UserCreate
+from src.schemas.user import UserLevelUpdate
 from src.schemas.user import UserRead
 
 
@@ -45,4 +48,34 @@ async def get_users_endpoint(session: AsyncSession = Depends(get_session)):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail='Database not available.',
+        )
+
+
+@router.patch('/{username}/level', response_model=UserRead)
+async def patch_user_level_by_name(
+    username: str, payload:
+    UserLevelUpdate, session:
+    AsyncSession = Depends(get_session),
+):
+    try:
+        user = await get_user_by_username(session, username)
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail='User not found',
+            )
+
+        updated = await update_user_level_by_username(
+            session, username,
+            payload.level,
+        )
+        if updated is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail='User not found',
+            )
+
+        return updated
+    except SQLAlchemyError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail='Database unavailable',
         )

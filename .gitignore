@@ -205,3 +205,4 @@ pyrightconfig.json
 .ionide
 
 *__pycache__
+*.mypy_cache

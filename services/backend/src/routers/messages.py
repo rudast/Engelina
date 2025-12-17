@@ -35,6 +35,8 @@ async def create_message_endpoint(
 
         # TODO request to worker
         # TODO get corrected, explained text, answer
+        # TODO user_id, level,
+        # ДЕЛАЕШЬ ЗАПРОС В ВОРКЕР
 
         if user_id is None:
             return

@@ -44,3 +44,12 @@ async def update_user_last_seen(session: AsyncSession, user_id: int) -> None:
         .values(last_seen_at=datetime.utcnow())
     )
     await session.execute(stmt)
+
+
+async def get_tg_id_by_username(
+    session: AsyncSession,
+    username: str,
+) -> int | None:
+    q = select(Users.tg_id).where(Users.username == username)
+    res = await session.execute(q)
+    return res.scalar_one_or_none()

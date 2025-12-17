@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime
 
 from pydantic import BaseModel
-from src.utils import ErrorTypeEnum
 from src.utils import LevelTypeEnum
 
 
@@ -29,24 +28,9 @@ class UserRead(BaseModel):
     model_config = {'from_attributes': True}
 
 
-class ErrorCreate(BaseModel):
-    msg_id: int
-    type: ErrorTypeEnum
-    subtype: str
-    original: str
-    corrected: str
-
-
-class ErrorRead(BaseModel):
-    id: int
-    msg_id: int
-    type: ErrorTypeEnum
-    subtype: str
-    original: str
-    corrected: str
-
-    model_config = {'from_attributes': True}
-
-
 class GetUsers(BaseModel):
     users: list[int] | None
+
+
+class UserLevelUpdate(BaseModel):
+    level: LevelTypeEnum
