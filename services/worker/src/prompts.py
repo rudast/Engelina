@@ -80,7 +80,7 @@ FEEDBACK_BASE_PROMPT = (
     '        "user_text": "…",\n'
     '        "error_type": "grammar",\n'
     '        "explanation": "…",\n'
-    '        "suggested_correction": "…"\n'
+    '        "text_corrected": "…"\n'
     "      }\n"
     "    ],\n"
     '    "overall_comment": "…"\n'

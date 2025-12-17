@@ -92,7 +92,7 @@ class AIWorkerModel:
             max_new_tokens=max_new_tokens,
             temperature=temperature,
             top_p=top_p,
-            pad_token_id=self.tokenizer.pad_token_type_id,
+            pad_token_id=self.tokenizer.pad_token_id,
         )
         
     def _decode_new_tokens(self, output_ids: torch.Tensor, input_len: int) -> str:

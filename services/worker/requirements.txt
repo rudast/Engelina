@@ -1,0 +1,20 @@
+# Core API libs (runner тоже может импортить схемы/utils)
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.12.4
+pydantic-settings==2.10.1
+
+redis==5.2.1
+rq==2.1.0
+
+# HF stack
+transformers==4.46.3
+huggingface-hub==0.36.0
+accelerate==1.0.1
+safetensors==0.4.5
+
+# 4-bit
+bitsandbytes==0.44.1
+
+# Torch (ВАЖНО: для GPU в контейнере лучше CUDA-образ или правильный wheel)
+torch==2.5.1

@@ -1,0 +1,56 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    restart: unless-stopped
+
+  ai_worker_api:
+    build: .
+    volumes:
+      - ./models/qwen2.5-7b-instruct:/models/qwen2.5-7b-instruct:ro
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      RQ_QUEUE_NAME: ai_worker
+    ports:
+       - "8002:8002"
+    #network_mode: "host"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ai_worker_runner:
+    build: .
+    volumes:
+      - ./models/qwen2.5-7b-instruct:/models/qwen2.5-7b-instruct:ro
+    command: ["rq", "worker", "ai_worker"]
+    environment:
+      MODEL_ID: /models/qwen2.5-7b-instruct
+      REDIS_URL: redis://redis:6379/0
+      RQ_QUEUE_NAME: ai_worker
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    depends_on:
+      redis: 
+        condition: service_healthy
+    security_opt:
+      - label=disable
+      - seccomp=unconfined  
+    cap_add:
+      - SYS_ADMIN
+    
+    devices:
+      - /dev/nvidia0:/dev/nvidia0
+      - /dev/nvidiactl:/dev/nvidiactl
+      - /dev/nvidia-uvm:/dev/nvidia-uvm
+      - /dev/nvidia-uvm-tools:/dev/nvidia-uvm-tools
+      - /dev/nvidia-modeset:/dev/nvidia-modeset
+      - /dev/nvidia-caps:/dev/nvidia-caps
+    restart: unless-stopped
+    # GPU (если реально настроен nvidia-container-toolkit):
+    # gpus: all

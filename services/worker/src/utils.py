@@ -4,8 +4,36 @@ import json
 import time
 from dataclasses import dataclass
 from typing import Any, Iterable, Optional
+import logging
+import asyncio
+
+from pydantic import ValidationError
 
 from src.schemas import ChatMessage, LanguageFeedback, Meta
+
+log = logging.getLogger()
+
+def trim_text(text: str, max_chars: int) -> str:
+    if max_chars <= 0:
+        return ""
+    text = text.strip()
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rstrip() + "..."
+
+def clamp_history_by_chars(history: list[ChatMessage], max_total_chars) -> list[ChatMessage]:
+    if max_total_chars <= 0:
+        return []
+    total = 0
+    kept: list[ChatMessage] = []
+
+    for msg in reversed(history):
+        ln = len(msg.content)
+        if total + ln > max_total_chars:
+            break
+        kept.append(msg)
+        total += ln
+    return list(reversed(kept))
 
 @dataclass
 class Timer:
@@ -54,20 +82,23 @@ def extract_json_object(text: str) -> dict[str, Any]:
     
 
 def safe_parse_language_feedback(text: str) -> Optional[LanguageFeedback]:
-    """
-    Try to parse model output us language feedback
-    
-    :param text: str
-    :return: LanguageFeedback
-    """
-    try: 
-        obj = extract_json_object()
+    try:
+        obj = extract_json_object(text)
 
-        lf = obj.get('language_feedback')
+        lf = obj.get("language_feedback")
         if lf is None:
+            log.error("No 'language_feedback' key in object. Keys=%s", list(obj.keys()))
             return None
-        return LanguageFeedback.model_validate(lf)
-    except Exception:
+
+        try:
+            return LanguageFeedback.model_validate(lf)
+        except ValidationError as e:
+            log.error("LanguageFeedback validation failed:\n%s", e)
+            log.error("Bad payload was:\n%s", lf)
+            return None
+
+    except Exception as e:
+        log.exception("Failed to parse JSON from model output: %s", e)
         return None
     
 
@@ -77,6 +108,17 @@ def fallback_language_feedback(reason: str = "Feedback temporarily unavailable."
     """
     return LanguageFeedback(items=[], overall_comment=reason)
 
+async def wait_job_result(job: Job, *, timeout_s: int = 120, poll_s: float = 0.2):
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        job.refresh()
+        status = job.get_status()
+        if status == "finished":
+            return job.result
+        if status == "failed":
+            raise RuntimeError((job.exc_info or "job failed")[-2000:])
+        await asyncio.sleep(poll_s)
+    raise TimeoutError("job timeout")
 
 # def get_level_from_meta(meta: Meta) -> Optional[str]:
 #     """
