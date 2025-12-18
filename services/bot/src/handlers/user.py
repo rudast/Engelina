@@ -123,6 +123,9 @@ Corrected: {res['text_corrected']}
 Explanation: {res['explanation']}
         '''
 
+    if text == '':
+        text = 'An error occurred, please try again later.  '
+
     await msg.reply(text, reply_markup=rate_beyboard)
 
 
@@ -130,9 +133,8 @@ Explanation: {res['explanation']}
 async def cmd_achievements(msg: Message):
     tg_id = msg.from_user.id
     index = 0
-    data = await get_response(f'http://backend:8000/api/v1/achievements/{
-        tg_id
-    }?index={index}')
+    data = await get_response(f'http://backend:8000/api/v1/achievements/\
+                              {tg_id}?index={index}')
 
     logging.getLogger(__name__).info(type(data))
     if data is None:

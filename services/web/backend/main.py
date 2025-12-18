@@ -159,33 +159,24 @@ def _auth_username_from_header(authorization: str | None) -> str:
 # ENDPOINTS: CHECK (через ai_worker_stub)
 # -------------------------
 @app.post('/api/check', response_model=CheckResponse)
-def check(req: CheckRequest, authorization: str | None = Header(default=None)):
+async def check(
+    req: CheckRequest, authorization: str | None =
+    Header(default=None),
+):
     username = _auth_username_from_header(authorization)
 
-    # если user сохранил level в Settings — используем его
-    level = _user_levels.get(username, req.level)
+    # если user сохранил level в Settings — используем ег
+    data = await get_response(f'http://backend:8000/api/v1/users/{username}')
 
-    payload = {'tg_username': username, 'text': req.text, 'level': level}
+    payload = {'tg_id': data['tg_id'], 'text_original': req.text}
 
     try:
-        r = requests.post(
-            f"{AI_WORKER_URL}/internal/analyze",
-            json=payload, timeout=60,
+        data = await post_response(
+            'http://backend:8000/api/v1/messages',
+            data=payload,
         )
     except requests.RequestException:
         raise HTTPException(status_code=502, detail='AI worker is unavailable')
-
-    if not r.ok:
-        raise HTTPException(
-            status_code=502, detail=f"AI worker error: {r.status_code}",
-        )
-
-    try:
-        data = r.json()
-    except ValueError:
-        raise HTTPException(
-            status_code=502, detail='AI worker returned invalid JSON',
-        )
 
     # мягкий парсинг errors, чтобы не падать из-за одного плохого элемента
     errors_parsed: list[ErrorItem] = []
@@ -258,8 +249,8 @@ def verify_code(payload: AuthVerifyIn):
 @app.get('/api/settings', response_model=SettingsOut)
 async def get_settings(authorization: str | None = Header(default=None)):
     username = _auth_username_from_header(authorization)
-    level = _user_levels.get(username, 'B1')
-    return {'tg_username': username, 'level': level}
+    data = await get_response(f'http://backend:8000/api/v1/users/{username}')
+    return {'tg_username': username, 'level': data['level']}
 
 
 @app.post('/api/settings', response_model=SettingsOut)
@@ -269,12 +260,12 @@ async def set_settings(
 ):
     username = _auth_username_from_header(authorization)
     _user_levels[username] = payload.level
-    # data = await patch_response(
-    #     url=f'http://backend:8000/api/v1/users/{username}/level',
-    #     data={
-    #         'level': payload.level,
-    #     },
-    # )
+    await patch_response(
+        url=f'http://backend:8000/api/v1/users/{username}/level',
+        data={
+            'level': payload.level,
+        },
+    )
 
     return {'tg_username': username, 'level': payload.level}
 
@@ -283,34 +274,24 @@ async def set_settings(
 # ENDPOINTS: STATS (через ai_worker_stub)
 # -------------------------
 @app.get('/api/stats', response_model=StatsResponse)
-def stats(
+async def stats(
     period: Literal['day', 'week', 'all'] = Query(default='week'),
     authorization: str | None = Header(default=None),
 ):
     username = _auth_username_from_header(authorization)
 
     try:
-        r = requests.get(
-            f"{AI_WORKER_URL}/internal/stats",
-            params={'tg_username': username, 'period': period},
-            timeout=20,
-        )
+        r = await get_response(f"http://backend:8000/api/v1/stats/?\
+                               tg_username={username}\
+                               &period={period}")
     except requests.RequestException:
         raise HTTPException(status_code=502, detail='AI worker is unavailable')
 
-    if not r.ok:
+    if r is None:
         raise HTTPException(
-            status_code=502, detail=f"AI worker error: {r.status_code}",
+            status_code=502, detail='AI worker error',
         )
-
-    try:
-        data = r.json()
-    except ValueError:
-        raise HTTPException(
-            status_code=502, detail='AI worker returned invalid JSON',
-        )
-
-    return data
+    return r
 
 
 async def post_response(url: str, data: dict) -> None | dict:
@@ -347,6 +328,33 @@ async def patch_response(url: str, data: dict) -> None | dict:
             async with session.patch(
                 url,
                 json=data,
+                timeout=200,
+            ) as resp:
+
+                if resp.status < 200 or resp.status >= 300:
+                    logging.getLogger(__name__).error(
+                        f'Responce error. Status: {resp.status}',
+                    )
+                    return None
+
+                data = await resp.json()
+                return dict(data)
+
+    except aiohttp.ClientError:
+        logging.getLogger(__name__).error('Server error.')
+    except asyncio.TimeoutError:
+        logging.getLogger(__name__).error('Timeout error.')
+    except Exception:
+        logging.getLogger(__name__).error('Unknow error.')
+
+    return None
+
+
+async def get_response(url: str) -> None | dict:
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                url,
                 timeout=200,
             ) as resp:
 

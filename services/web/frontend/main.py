@@ -127,8 +127,8 @@ elif page == 'Checker':
 
     level = st.selectbox(
         'Level',
-        ['A1', 'A2', 'B1', 'B2', 'C1'],
-        index=['A1', 'A2', 'B1', 'B2', 'C1'].index(current_level),
+        ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'],
+        index=['A1', 'A2', 'B1', 'B2', 'C1', 'C2'].index(current_level),
     )
 
     text = st.text_area('Enter your text', height=220)
@@ -199,8 +199,8 @@ elif page == 'Settings':
     )
     level = st.selectbox(
         'Preferred level',
-        ['A1', 'A2', 'B1', 'B2', 'C1'],
-        index=['A1', 'A2', 'B1', 'B2', 'C1'].index(current_level),
+        ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'],
+        index=['A1', 'A2', 'B1', 'B2', 'C1', 'C2'].index(current_level),
     )
 
     if st.button('Save', type='primary'):

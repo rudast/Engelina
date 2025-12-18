@@ -13,7 +13,7 @@ class ErrorTypeEnum(enum.Enum):
     grammar = 'Grammar'
     punctuation = 'Punctuation'
     style = 'Style'
-    vocabulary = 'Vocabulary'
+    vocabulary = 'vocabulary'
 
 
 class LevelTypeEnum(enum.Enum):

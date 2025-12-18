@@ -25,10 +25,10 @@ class Settings(BaseSettings):
     MAX_MESSAGE_CHARS: int = 1200
     MAX_HISTORY_CHARS: int = 8000
     MAX_CONCURRENT_GENERATIONS: int = 1
-    MAX_NEW_TOKENS_REPLY: int = 128
-    MAX_NEW_TOKENS_FEEDBACK: int = 128
+    MAX_NEW_TOKENS_REPLY: int = 1024
+    MAX_NEW_TOKENS_FEEDBACK: int = 256
     TEMPERATURE_REPLY: float = 0.6
-    TEMPERATURE_FEEDBACK: float = 0.1
+    TEMPERATURE_FEEDBACK: float = 0.2
     TOP_P: float = 0.9
 
 

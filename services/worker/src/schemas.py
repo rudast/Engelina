@@ -23,7 +23,7 @@ class ReplyRequest(BaseModel):
     user_id: str
     session_id: str | None
     message: str
-    history: list[ChatMessage] = []
+    history: list[ChatMessage] = Field(default_factory=list)
     meta: Meta | None = None
 
 
