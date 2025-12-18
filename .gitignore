@@ -206,3 +206,6 @@ pyrightconfig.json
 
 *__pycache__
 *.mypy_cache
+
+# Models
+models/
