@@ -1,0 +1,24 @@
+services:
+  backend:
+    build: ./backend
+    environment:
+      AI_WORKER_URL: http://ai_worker_service:8001
+      CODE_TTL_MIN: "10"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - ai_worker_service
+
+  frontend:
+    build: ./frontend
+    environment:
+      BACKEND_API_URL: http://backend:8000
+    ports:
+      - "8501:8501"
+    depends_on:
+      - backend
+
+  ai_worker_service:
+    build: ./ai_worker_stub
+    ports:
+      - "8001:8001"
