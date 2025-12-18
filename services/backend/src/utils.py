@@ -13,6 +13,7 @@ class ErrorTypeEnum(enum.Enum):
     grammar = 'Grammar'
     punctuation = 'Punctuation'
     style = 'Style'
+    vocabulary = 'Vocabulary'
 
 
 class LevelTypeEnum(enum.Enum):
@@ -53,3 +54,58 @@ async def send_notice(tg_id: int, text: str):
         logging.getLogger(__name__).error('Timeout error.')
     except Exception:
         logging.getLogger(__name__).error('Unknow error.')
+
+
+async def post_response(url: str, data: dict) -> None | dict:
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                url,
+                json=data,
+                timeout=200,
+            ) as resp:
+
+                if resp.status < 200 or resp.status >= 300:
+                    logging.getLogger(__name__).error(
+                        f'Responce error. Status: {resp.status}',
+                    )
+                    return None
+
+                data = await resp.json()
+                return dict(data)
+
+    except aiohttp.ClientError:
+        logging.getLogger(__name__).error('Server error.')
+    except asyncio.TimeoutError:
+        logging.getLogger(__name__).error('Timeout error.')
+    except Exception:
+        logging.getLogger(__name__).error('Unknow error.')
+
+    return None
+
+
+async def get_response(url: str) -> None | dict:
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                url,
+                timeout=200,
+            ) as resp:
+
+                if resp.status < 200 or resp.status >= 300:
+                    logging.getLogger(__name__).error(
+                        f'Responce error. Status: {resp.status}',
+                    )
+                    return None
+
+                data = await resp.json()
+                return dict(data)
+
+    except aiohttp.ClientError:
+        logging.getLogger(__name__).error('Server error.')
+    except asyncio.TimeoutError:
+        logging.getLogger(__name__).error('Timeout error.')
+    except Exception:
+        logging.getLogger(__name__).error('Unknow error.')
+
+    return None
