@@ -12,13 +12,13 @@ from rq.job import Job
 from src.schemas import ChatMessage
 from src.schemas import LanguageFeedback
 
-log = logging.getLogger()
+log = logging.getLogger('ai_worker.utils')
 
 
 def trim_text(text: str, max_chars: int) -> str:
     if max_chars <= 0:
         return ''
-    text = text.strip()
+    text = (text or '').strip()
     if len(text) <= max_chars:
         return text
     return text[:max_chars].rstrip() + '...'
@@ -66,14 +66,6 @@ def clamp_history(
 
 
 def extract_json_object(text: str) -> dict[str, Any]:
-    """
-    extract json from text
-
-    :param text: str
-    :return: dict[str, Any]
-
-    "some text ... {...valid_json...} ... some text"
-    """
     if not text:
         raise ValueError('Empty text')
 
@@ -98,30 +90,33 @@ def safe_parse_language_feedback(text: str) -> LanguageFeedback | None:
         lf = obj.get('language_feedback')
         if lf is None:
             log.error(
-                "No 'language_feedback' key in object. Keys=%s",
-                list(obj.keys()),
+                "parse: missing key 'language_feedback' | keys=%s", list(
+                    obj.keys(),
+                ),
             )
             return None
 
         try:
             return LanguageFeedback.model_validate(lf)
         except ValidationError as e:
-            log.error('LanguageFeedback validation failed:\n%s', e)
-            log.error('Bad payload was:\n%s', lf)
+            log.error('parse: LanguageFeedback validation failed | err=%s', e)
+            log.debug('parse: bad payload | payload=%s', lf)
             return None
 
     except Exception as e:
-        log.exception('Failed to parse JSON from model output: %s', e)
+        log.exception(
+            'parse: failed to parse JSON from model output | err=%s', e,
+        )
         return None
 
 
 def fallback_language_feedback(
         reason: str = 'Feedback temporarily unavailable.',
 ) -> LanguageFeedback:
-    """
-    Create a safe feedback object
-    """
-    return LanguageFeedback(items=[], overall_comment=reason)
+    return LanguageFeedback(
+        items=[],
+        overall_comment=reason,
+    )
 
 
 async def wait_job_result(
@@ -131,27 +126,25 @@ async def wait_job_result(
         poll_s: float = 0.2,
 ):
     deadline = time.monotonic() + timeout_s
+
+    log.info(
+        'rq wait: start | job_id=%s timeout_s=%s poll_s=%s',
+        job.id, timeout_s, poll_s,
+    )
+
     while time.monotonic() < deadline:
         job.refresh()
         status = job.get_status()
+
         if status == 'finished':
+            log.info('rq wait: finished | job_id=%s', job.id)
             return job.result
+
         if status == 'failed':
+            log.error('rq wait: failed | job_id=%s', job.id)
             raise RuntimeError((job.exc_info or 'job failed')[-2000:])
+
         await asyncio.sleep(poll_s)
+
+    log.warning('rq wait: timeout | job_id=%s', job.id)
     raise TimeoutError('job timeout')
-
-# def get_level_from_meta(meta: Meta) -> Optional[str]:
-#     """
-#     Helper to safely extract 'level'
-#     """
-
-#     if meta is None:
-#         return None
-#     level = getattr(meta, 'level', None)
-#     if level:
-#         return str(level)
-#     if isinstance(meta, dict):
-#         v = meta.get("level")
-#         return str(v) if v else None
-#     return None

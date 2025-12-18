@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
@@ -15,6 +17,7 @@ from src.routers.users import create_user_endpoint
 from src.schemas.message import MessageCreate
 from src.schemas.message import MessageRead
 from src.schemas.user import UserCreate
+from src.utils import post_response
 from src.utils import send_notice
 
 router = APIRouter(prefix='/api/v1/messages', tags=['messages'])
@@ -33,10 +36,33 @@ async def create_message_endpoint(
             await create_user_endpoint(UserCreate(tg_id=message.tg_id))
             user_id = await get_user_id_by_id(session, message.tg_id)
 
-        # TODO request to worker
-        # TODO get corrected, explained text, answer
-        # TODO user_id, level,
-        # ДЕЛАЕШЬ ЗАПРОС В ВОРКЕР
+        reply_json = await post_response(
+            url='http://ai_worker_api:8002/api/v1/worker/reply',
+            data={
+                'user_id': 'string',
+                'session_id': 'string',
+                'message': f"{message.text_original}",
+                'history': [],
+                'meta': {
+                    'level': 'A2',
+                    'platform': 'telegram',
+                },
+            },
+        )
+
+        feed_json = await post_response(
+            url='http://ai_worker_api:8002/api/v1/worker/feedback',
+            data={
+                'user_id': 'string',
+                'session_id': 'string',
+                'message': f"{message.text_original}",
+                'meta': {
+                    'level': 'A2',
+                    'platform': 'telegram',
+                },
+            },
+        )
+        logging.getLogger(__name__).info(feed_json)
 
         if user_id is None:
             return
@@ -45,8 +71,12 @@ async def create_message_endpoint(
 
         msg = await create_message(
             session,
-            user_id, message.text_original, '# TODO corrected',
-            '# TODO explanation', '# TODO answer',
+            user_id, message.text_original, feed_json['result'][
+                'language_feedback'
+            ]['items'][0]['text_corrected'],
+            feed_json['result']['language_feedback']
+            ['items'][0]['explanation'],
+            reply_json['result']['reply'],
         )
 
         new_ach_ids = await check_and_award_on_message(session, user_id)

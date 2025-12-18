@@ -1,24 +1,149 @@
 services:
+  # -----------------------------
+  # DB
+  # -----------------------------
+  db:
+    image: postgres:17.4-alpine
+    env_file: .env
+    restart: unless-stopped
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  # -----------------------------
+  # Backend API
+  # -----------------------------
   backend:
-    build: ./backend
-    environment:
-      AI_WORKER_URL: http://ai_worker_service:8001
-      CODE_TTL_MIN: "10"
+    build: ./services/backend
+    env_file: .env
+    restart: unless-stopped
     ports:
       - "8000:8000"
     depends_on:
-      - ai_worker_service
+      - db
+        # condition: service_healthy
+    # environment:
+    #   # чтобы бек ходил в воркер по сервисному DNS имени внутри compose-сети
+    #   AI_WORKER_URL: http://ai_worker_api:8002
+    #   # если бек захочет напрямую класть задачи в очередь (опционально)
+    #   REDIS_URL: redis://redis:6379/0
+    #   RQ_QUEUE_NAME: ai_worker
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:8000/api/v1/health/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
-  frontend:
-    build: ./frontend
-    environment:
-      BACKEND_API_URL: http://backend:8000
-    ports:
-      - "8501:8501"
+  # -----------------------------
+  # Telegram bot
+  # -----------------------------
+  bot:
+    build: ./services/bot
+    env_file: .env
+    restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_started
+    environment:
+      # бот должен ходить в бек по имени сервиса, а не localhost
+      BACKEND_URL: http://backend:8000
 
-  ai_worker_service:
-    build: ./ai_worker_stub
+  # -----------------------------
+  # Redis for worker queue
+  # -----------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
     ports:
-      - "8001:8001"
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  # -----------------------------
+  # AI Worker API (FastAPI)
+  # -----------------------------
+  ai_worker_api:
+    build: ./services/worker
+    restart: unless-stopped
+    volumes:
+      - ./services/worker/models/qwen2.5-7b-instruct:/models/qwen2.5-7b-instruct:ro
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      RQ_QUEUE_NAME: ai_worker
+      MODEL_ID: /models/qwen2.5-7b-instruct
+    ports:
+      - "8002:8002"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # -----------------------------
+  # AI Worker Runner (RQ worker)
+  # -----------------------------
+  ai_worker_runner:
+    build: ./services/worker
+    restart: unless-stopped
+    volumes:
+      - ./services/worker/models/qwen2.5-7b-instruct:/models/qwen2.5-7b-instruct:ro
+    command: ["rq", "worker", "ai_worker"]
+    environment:
+      MODEL_ID: /models/qwen2.5-7b-instruct
+      REDIS_URL: redis://redis:6379/0
+      RQ_QUEUE_NAME: ai_worker
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    depends_on:
+      redis:
+        condition: service_healthy
+    security_opt:
+      - label=disable
+      - seccomp=unconfined
+    cap_add:
+      - SYS_ADMIN
+    devices:
+      - /dev/nvidia0:/dev/nvidia0
+      - /dev/nvidiactl:/dev/nvidiactl
+      - /dev/nvidia-uvm:/dev/nvidia-uvm
+      - /dev/nvidia-uvm-tools:/dev/nvidia-uvm-tools
+      - /dev/nvidia-modeset:/dev/nvidia-modeset
+      - /dev/nvidia-caps:/dev/nvidia-caps
+    # альтернативно (если у тебя реально поднят nvidia-container-toolkit и compose это поддерживает):
+    # gpus: all
+
+  # -----------------------------
+  # Web (опционально) — если хочешь жить в одном compose
+  # -----------------------------
+  web_backend:
+    build: ./services/web/backend
+    restart: unless-stopped
+    ports:
+      - "8003:8003"
+    environment:
+      BACKEND_URL: http://backend:8000
+    depends_on:
+      backend:
+        condition: service_started
+
+  web_frontend:
+    build: ./services/web/frontend
+    restart: unless-stopped
+    ports:
+      - "8004:8004"
+    environment:
+      WEB_BACKEND_URL: http://web_backend:8003
+    depends_on:
+      web_backend:
+        condition: service_started
+
+volumes:
+  pg_data:

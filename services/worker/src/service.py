@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 import threading
 
+from src.model import AIWorkerModel
+from src.prompts import get_prompt
 from src.schemas import ChatMessage
 from src.schemas import FeedbackRequest
 from src.schemas import FeedbackResponse
@@ -10,21 +12,17 @@ from src.schemas import LanguageFeedback
 from src.schemas import ReplyRequest
 from src.schemas import ReplyResponse
 from src.settings import Settings
-
-from .model import AIWorkerModel
-from .prompts import get_prompt
-from .utils import clamp_history
-from .utils import clamp_history_by_chars
-from .utils import fallback_language_feedback
-from .utils import safe_parse_language_feedback
-from .utils import Timer
-from .utils import trim_text
+from src.utils import clamp_history
+from src.utils import clamp_history_by_chars
+from src.utils import fallback_language_feedback
+from src.utils import safe_parse_language_feedback
+from src.utils import Timer
+from src.utils import trim_text
 
 logger = logging.getLogger('ai_worker.service')
 
 
 class AIWorkerService:
-
     def __init__(self, model: AIWorkerModel, settings: Settings):
         self.model = model
         self.settings = settings
@@ -34,9 +32,6 @@ class AIWorkerService:
 
     @staticmethod
     def _history_to_dicts(history: list[ChatMessage]) -> list[dict[str, str]]:
-        """
-        Conver List[ChatMessage] to dict fromat expected by tokenizer
-        """
         return [{'role': m.role, 'content': m.content} for m in history]
 
     def make_reply(
@@ -44,14 +39,8 @@ class AIWorkerService:
             req: ReplyRequest,
             request_id: str | None = None,
     ) -> ReplyResponse:
-        """
-        Generate conversation reply between user and worker
-        """
         level = req.meta.level if req.meta else None
-        system_prompt = get_prompt(
-            level=level,
-            kind='reply',
-        )
+        system_prompt = get_prompt(level=level, kind='reply')
 
         user_msg = trim_text(req.message, self.settings.MAX_MESSAGE_CHARS)
 
@@ -63,27 +52,40 @@ class AIWorkerService:
         )
         hist_dicts = self._history_to_dicts(hist)
 
-        t = Timer.start()
+        logger.info(
+            'reply: start | rid=%s user_id=%s '
+            'session_id=%s level=%s hist_turns=%s',
+            request_id,
+            req.user_id,
+            req.session_id,
+            level,
+            len(hist_dicts),
+        )
 
+        t = Timer.start()
         with self._gen_sema:
             reply_text = self.model.generate_reply(
                 system_prompt=system_prompt,
                 history=hist_dicts,
                 user_message=user_msg,
             )
-
         latency = t.elapsed_ms()
 
         logger.info(
-            'reply: ok | rid=%s user_id=%s session_id=%s level=%s latency=%s',
-            request_id, req.user_id, req.session_id, level, latency,
+            'reply: ok | rid=%s user_id=%s session_id=%s '
+            'level=%s latency_ms=%s reply_len=%s',
+            request_id,
+            req.user_id,
+            req.session_id,
+            level,
+            latency,
+            len(reply_text or ''),
         )
 
         return ReplyResponse(
             reply=reply_text,
             meta={
-                'latency_ms': latency,
-                'mode': 'reply',
+                'latency_ms': latency, 'mode': 'reply',
                 'level': level or 'auto',
             },
         )
@@ -93,14 +95,17 @@ class AIWorkerService:
             req: FeedbackRequest,
             request_id: str | None = None,
     ) -> FeedbackResponse:
-        """
-        Generate structured language feedback about the user's last message.
-        Must never crash the service if JSON formatting fails.
-        """
         level = req.meta.level if req.meta else None
         system_prompt = get_prompt(level, kind='feedback')
-
         user_msg = trim_text(req.message, self.settings.MAX_MESSAGE_CHARS)
+
+        logger.info(
+            'feedback: start | rid=%s user_id=%s session_id=%s level=%s',
+            request_id,
+            req.user_id,
+            req.session_id,
+            level,
+        )
 
         t = Timer.start()
         with self._gen_sema:
@@ -117,33 +122,35 @@ class AIWorkerService:
             parsed = fallback_language_feedback(
                 'Feedback temporarily unavailable (formatting error).',
             )
-        if used_fallback is None:
-            raw_preview = raw[:200].replace('\n', '\\n')
-            rid_str = 'rid=' + request_id
-            user_id_str = 'user_id=' + req.user_id
-            session_id_str = 'session_id' + req.session_id
-            level_str = 'level=' + level
-            latency_str = 'latency_ms=' + latency
-            raw_preview_str = 'raw_preview' + raw_preview
 
+        if used_fallback:
+            raw_preview = (raw or '')[:200].replace('\n', '\\n')
             logger.warning(
-                rid_str + user_id_str + session_id_str +
-                level_str + latency_str + raw_preview_str,
+                'feedback: fallback used | rid=%s user_id=%s '
+                'session_id=%s level=%s latency_ms=%s raw_preview=%s',
+                request_id,
+                req.user_id,
+                req.session_id,
+                level,
+                latency,
+                raw_preview,
             )
         else:
             logger.info(
-                'feedback ok | rid=%s user_id=%s session_id=%s \
-                    level=%s latency_ms=%s items=%s',
-                request_id, req.user_id, req.session_id, level, latency, len(
-                    parsed.items,
-                ),
+                'feedback: ok | rid=%s user_id=%s session_id=%s '
+                'level=%s latency_ms=%s items=%s',
+                request_id,
+                req.user_id,
+                req.session_id,
+                level,
+                latency,
+                len(parsed.items),
             )
 
         return FeedbackResponse(
             language_feedback=parsed,
             meta={
-                'latency_ms': latency,
-                'mode': 'feedback',
+                'latency_ms': latency, 'mode': 'feedback',
                 'level': level or 'auto',
             },
         )

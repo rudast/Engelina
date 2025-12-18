@@ -60,9 +60,13 @@ if page == 'Login':
                         (Demo: code is printed in backend logs)',
                     )
                     st.session_state.tg_username = username.strip().lstrip('@')
+
                 else:
-                    st.error(f"Error: {r.status_code}")
-                    st.code(r.text)
+                    if r.status_code == 404:
+                        st.error('User not found')
+                    else:
+                        st.error(f"Error: {r.status_code}")
+                        st.code(r.text)
 
     st.divider()
     code = st.text_input('Enter 5-digit code', max_chars=5)

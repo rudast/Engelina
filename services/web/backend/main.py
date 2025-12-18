@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 import random
 from datetime import datetime
@@ -8,6 +10,7 @@ from datetime import timezone
 from typing import Any
 from typing import Literal
 
+import aiohttp
 import requests
 from fastapi import FastAPI
 from fastapi import Header
@@ -38,8 +41,7 @@ def _make_code_5() -> str:
     return f"{random.randint(0, 99999):05d}"
 
 
-def _send_code_to_telegram_mock(username: str, code: str) -> None:
-    print(f"[AUTH MOCK] Send code to @{username}: {code}")
+# async def _send_code_to_telegram_mock(username: str, code: str) -> None:
 
 
 @app.get('/api/health')
@@ -93,7 +95,7 @@ class AuthVerifyOut(BaseModel):
 # MODELS: SETTINGS
 # -------------------------
 class SettingsIn(BaseModel):
-    level: str = Field(..., pattern=r'^(A1|A2|B1|B2|C1)$')
+    level: str = Field(..., pattern=r'^(A1|A2|B1|B2|C1|C2)$')
 
 
 class SettingsOut(BaseModel):
@@ -204,7 +206,7 @@ def check(req: CheckRequest, authorization: str | None = Header(default=None)):
 # ENDPOINTS: AUTH
 # -------------------------
 @app.post('/api/auth/request-code', response_model=AuthRequestCodeOut)
-def request_code(payload: AuthRequestCodeIn):
+async def request_code(payload: AuthRequestCodeIn):
     username = payload.tg_username.strip().lstrip('@')
     if not username:
         raise HTTPException(status_code=400, detail='tg_username is empty')
@@ -213,7 +215,17 @@ def request_code(payload: AuthRequestCodeIn):
     expires_at = _now_utc() + timedelta(minutes=CODE_TTL_MIN)
     _pending_codes[username] = {'code': code, 'expires_at': expires_at}
 
-    _send_code_to_telegram_mock(username, code)
+    data = await post_response(
+        'http://backend:8000/api/v1/auth/verify',
+        {
+            'username': username,
+            'code': code,
+        },
+    )
+    if data is None:
+        logging.getLogger(__name__).info('User not found.')
+        raise HTTPException(status_code=404)
+
     return {'status': 'sent'}
 
 
@@ -244,19 +256,26 @@ def verify_code(payload: AuthVerifyIn):
 # ENDPOINTS: SETTINGS
 # -------------------------
 @app.get('/api/settings', response_model=SettingsOut)
-def get_settings(authorization: str | None = Header(default=None)):
+async def get_settings(authorization: str | None = Header(default=None)):
     username = _auth_username_from_header(authorization)
     level = _user_levels.get(username, 'B1')
     return {'tg_username': username, 'level': level}
 
 
 @app.post('/api/settings', response_model=SettingsOut)
-def set_settings(
+async def set_settings(
     payload: SettingsIn,
     authorization: str | None = Header(default=None),
 ):
     username = _auth_username_from_header(authorization)
     _user_levels[username] = payload.level
+    # data = await patch_response(
+    #     url=f'http://backend:8000/api/v1/users/{username}/level',
+    #     data={
+    #         'level': payload.level,
+    #     },
+    # )
+
     return {'tg_username': username, 'level': payload.level}
 
 
@@ -292,3 +311,59 @@ def stats(
         )
 
     return data
+
+
+async def post_response(url: str, data: dict) -> None | dict:
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                url,
+                json=data,
+                timeout=200,
+            ) as resp:
+
+                if resp.status < 200 or resp.status >= 300:
+                    logging.getLogger(__name__).error(
+                        f'Responce error. Status: {resp.status}',
+                    )
+                    return None
+
+                data = await resp.json()
+                return dict(data)
+
+    except aiohttp.ClientError:
+        logging.getLogger(__name__).error('Server error.')
+    except asyncio.TimeoutError:
+        logging.getLogger(__name__).error('Timeout error.')
+    except Exception:
+        logging.getLogger(__name__).error('Unknow error.')
+
+    return None
+
+
+async def patch_response(url: str, data: dict) -> None | dict:
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.patch(
+                url,
+                json=data,
+                timeout=200,
+            ) as resp:
+
+                if resp.status < 200 or resp.status >= 300:
+                    logging.getLogger(__name__).error(
+                        f'Responce error. Status: {resp.status}',
+                    )
+                    return None
+
+                data = await resp.json()
+                return dict(data)
+
+    except aiohttp.ClientError:
+        logging.getLogger(__name__).error('Server error.')
+    except asyncio.TimeoutError:
+        logging.getLogger(__name__).error('Timeout error.')
+    except Exception:
+        logging.getLogger(__name__).error('Unknow error.')
+
+    return None

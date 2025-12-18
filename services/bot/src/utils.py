@@ -13,7 +13,7 @@ async def post_response(url: str, data: dict, msg: Message) -> None | dict:
             async with session.post(
                 url,
                 json=data,
-                timeout=5,
+                timeout=100,
             ) as resp:
 
                 if resp.status < 200 or resp.status >= 300:
@@ -53,7 +53,7 @@ async def get_response(url: str) -> None | dict:
         async with aiohttp.ClientSession() as session:
             async with session.get(
                 url,
-                timeout=5,
+                timeout=100,
             ) as resp:
 
                 if resp.status < 200 or resp.status >= 300:
