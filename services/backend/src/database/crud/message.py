@@ -11,13 +11,13 @@ async def create_message(
     text_corrected: str,
     explanation: str,
     answer: str,
-):
+) -> Messages:
     msg = Messages(
         user_id=user_id,
-        text_original=text_original,
-        text_corrected=text_corrected,
-        explanation=explanation,
-        answer=answer,
+        text_original=text_original or '',
+        text_corrected=text_corrected or '',
+        explanation=explanation or '',
+        answer=answer or '',
     )
     session.add(msg)
     await session.flush()

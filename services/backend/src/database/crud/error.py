@@ -28,22 +28,50 @@ async def create_error(
     return err
 
 
+def _map_error_type(type_str: str) -> ErrorTypeEnum:
+    if not type_str:
+        return ErrorTypeEnum.style
+    t = type_str.strip().lower()
+    if t in ('spelling', 'spell'):
+        return ErrorTypeEnum.spelling
+    if t in ('grammar',):
+        return ErrorTypeEnum.grammar
+    if t in ('punctuation', 'punct'):
+        return ErrorTypeEnum.punctuation
+    if t in ('style',):
+        return ErrorTypeEnum.style
+    if t in ('vocabulary', 'vocab'):
+        return ErrorTypeEnum.vocabulary
+
+    return ErrorTypeEnum.style
+
+
 async def create_errors_bulk(
     session: AsyncSession,
-    errors_data: Iterable[dict],
+    msg_id: int,
+    items: Iterable[dict],
 ) -> list[Errors]:
     created: list[Errors] = []
-    for d in errors_data:
+    for it in items:
+        err_type = _map_error_type(
+            it.get('type', '') if isinstance(it, dict) else '',
+        )
+        subtype = (it.get('subtype') or '') if isinstance(it, dict) else ''
+        original = (it.get('original') or '') if isinstance(it, dict) else ''
+        corrected = (it.get('corrected') or '') if isinstance(it, dict) else ''
+
         err = Errors(
-            msg_id=d['msg_id'],
-            type=d['error_type'],
-            subtype=d.get('subtype', '') or '',
-            original=d.get('original', '') or '',
-            corrected=d.get('corrected', '') or '',
+            msg_id=msg_id,
+            type=err_type,
+            subtype=subtype,
+            original=original,
+            corrected=corrected,
         )
         session.add(err)
         created.append(err)
-    await session.flush()
-    for e in created:
-        await session.refresh(e)
+
+    if created:
+        await session.flush()
+        for e in created:
+            await session.refresh(e)
     return created

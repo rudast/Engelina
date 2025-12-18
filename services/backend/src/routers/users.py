@@ -51,6 +51,24 @@ async def get_users_endpoint(session: AsyncSession = Depends(get_session)):
         )
 
 
+@router.get(
+    '/{username}', response_model=UserRead,
+    status_code=status.HTTP_200_OK,
+)
+async def get_user_endpoint(
+    username: str,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        user = await get_user_by_username(session, username)
+        return user
+    except SQLAlchemyError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail='Database not available.',
+        )
+
+
 @router.patch('/{username}/level', response_model=UserRead)
 async def patch_user_level_by_name(
     username: str, payload:
@@ -81,19 +99,19 @@ async def patch_user_level_by_name(
         )
 
 
-@router.get(
-    '/{username}', response_model=UserRead,
-    status_code=status.HTTP_200_OK,
-)
-async def get_user_endpoint(
-    username: str,
-    session: AsyncSession = Depends(get_session),
-):
-    try:
-        user = await get_user_by_username(session, username)
-        return user
-    except SQLAlchemyError:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail='Database not available.',
-        )
+# @router.get(
+#     '/{username}', response_model=UserRead,
+#     status_code=status.HTTP_200_OK,
+# )
+# async def get_user_endpoint(
+#     username: str,
+#     session: AsyncSession = Depends(get_session),
+# ):
+#     try:
+#         user = await get_user_by_username(session, username)
+#         return user
+#     except SQLAlchemyError:
+#         raise HTTPException(
+#             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+#             detail='Database not available.',
+#         )
