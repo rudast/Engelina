@@ -9,6 +9,19 @@ API_BASE = os.getenv('BACKEND_API_URL', 'http://backend:8000').rstrip('/')
 
 st.set_page_config(page_title='English Text Checker', layout='centered')
 
+st.markdown(
+    """
+    <style>
+      .rotate-90 {
+        transform: rotate(90deg);
+        transform-origin: left top;
+        width: 100vh; /* helps avoid clipping after rotation */
+      }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 if 'token' not in st.session_state:
     st.session_state.token = None
 if 'tg_username' not in st.session_state:
@@ -21,6 +34,41 @@ def api_headers():
     return {}
 
 
+# -------------------------
+# красивые ошибки
+# -------------------------
+def _pretty_label(x: object) -> str:
+    s = str(x or '').strip()
+    if not s or s.lower() in {'none', 'null', '-'}:
+        return '—'
+    s = s.replace('_', ' ').replace('-', ' ')
+    return s[:1].upper() + s[1:]
+
+
+TYPE_TITLES: dict[str, str] = {
+    'grammar': 'Grammar',
+    'style': 'Style',
+    'punctuation': 'Punctuation',
+    'spelling': 'Spelling',
+    'lexis': 'Vocabulary',
+    'vocabulary': 'Vocabulary',
+}
+
+
+def _pretty_type(t: object) -> str:
+    key = str(t or '').strip().lower()
+    if not key:
+        return 'Other'
+    return TYPE_TITLES.get(key, _pretty_label(key))
+
+
+def _short_text(x: object, limit: int = 140) -> str:
+    s = str(x or '').strip()
+    if len(s) <= limit:
+        return s
+    return s[: limit - 1] + '…'
+
+
 st.sidebar.title('Menu')
 page = st.sidebar.radio(
     'Go to',
@@ -31,10 +79,11 @@ st.sidebar.caption(f"API: {API_BASE}")
 
 
 # -------------------------
-# LOGIN
+# регистрация
 # -------------------------
 if page == 'Login':
     st.title('Login via Telegram username')
+    st.caption("Telegram bot: [@engelinabot](https://t.me/engelinabot)")
 
     username = st.text_input(
         'Telegram username (without @)', value=st.session_state.tg_username,
@@ -55,12 +104,8 @@ if page == 'Login':
                 st.caption(str(e))
             else:
                 if r.ok:
-                    st.success(
-                        'Code requested.\
-                        (Demo: code is printed in backend logs)',
-                    )
+                    st.success('Code requested. (Demo: code is printed in backend logs)')
                     st.session_state.tg_username = username.strip().lstrip('@')
-
                 else:
                     if r.status_code == 404:
                         st.error('User not found')
@@ -78,10 +123,7 @@ if page == 'Login':
             try:
                 r = requests.post(
                     f"{API_BASE}/api/auth/verify",
-                    json={
-                        'tg_username': username.strip(),
-                        'code': code.strip(),
-                    },
+                    json={'tg_username': username.strip(), 'code': code.strip()},
                     timeout=30,
                 )
             except requests.RequestException as e:
@@ -104,7 +146,7 @@ if page == 'Login':
 
 
 # -------------------------
-# CHECKER
+# чекер
 # -------------------------
 elif page == 'Checker':
     st.title('English Text Checker')
@@ -113,12 +155,12 @@ elif page == 'Checker':
         st.warning('Please login first (Menu → Login).')
         st.stop()
 
-    # подтянуть текущий уровень из settings
     current_level = 'B1'
     try:
         r = requests.get(
             f"{API_BASE}/api/settings",
-            headers=api_headers(), timeout=10,
+            headers=api_headers(),
+            timeout=10,
         )
         if r.ok:
             current_level = r.json().get('level', 'B1')
@@ -151,6 +193,7 @@ elif page == 'Checker':
             else:
                 if r.ok:
                     data = r.json()
+
                     st.subheader('Corrected text')
                     st.write(data.get('corrected_text', ''))
 
@@ -162,19 +205,26 @@ elif page == 'Checker':
                     if not errs:
                         st.success('No errors')
                     else:
+                        rows = []
                         for e in errs:
-                            st.write(
-                                f"- {e.get('type')} / \
-                                    {e.get('subtype', '-')}: "
-                                f"{e.get('original')} → {e.get('corrected')}",
-                            )
+                            etype = _pretty_type(e.get('type'))
+                            subtype = _pretty_label(e.get('subtype'))
+                            kind = etype if subtype == '—' else f"{etype} • {subtype}"
+
+                            rows.append({
+                                'Type': kind,
+                                'Original': _short_text(e.get('original')),
+                                'Corrected': _short_text(e.get('corrected')),
+                            })
+
+                        st.dataframe(rows, use_container_width=True, hide_index=True)
                 else:
                     st.error(f"Backend error: {r.status_code}")
                     st.code(r.text)
 
 
 # -------------------------
-# SETTINGS
+# настройки
 # -------------------------
 elif page == 'Settings':
     st.title('Settings')
@@ -187,16 +237,15 @@ elif page == 'Settings':
     try:
         r = requests.get(
             f"{API_BASE}/api/settings",
-            headers=api_headers(), timeout=15,
+            headers=api_headers(),
+            timeout=15,
         )
         if r.ok:
             current_level = r.json().get('level', 'B1')
     except requests.RequestException:
         pass
 
-    st.write(
-        'Choose the level the bot should use when communicating with you.',
-    )
+    st.write('Choose the level the bot should use when communicating with you.')
     level = st.selectbox(
         'Preferred level',
         ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'],
@@ -223,7 +272,7 @@ elif page == 'Settings':
 
 
 # -------------------------
-# STATS
+# статистика
 # -------------------------
 elif page == 'Stats':
     st.title('Stats')
@@ -231,6 +280,8 @@ elif page == 'Stats':
     if not st.session_state.token:
         st.warning('Please login first (Menu → Login).')
         st.stop()
+
+    st.markdown('<div class="rotate-90">', unsafe_allow_html=True)
 
     period = st.selectbox('Period', ['day', 'week', 'all'], index=1)
 
@@ -244,11 +295,13 @@ elif page == 'Stats':
     except requests.RequestException as e:
         st.error('Backend is unavailable')
         st.caption(str(e))
+        st.markdown('</div>', unsafe_allow_html=True)
         st.stop()
 
     if not r.ok:
         st.error(f"Backend error: {r.status_code}")
         st.code(r.text)
+        st.markdown('</div>', unsafe_allow_html=True)
         st.stop()
 
     data = r.json()
@@ -260,11 +313,9 @@ elif page == 'Stats':
 
     st.divider()
 
-    # LINE CHART: errors over time
     st.subheader('Errors over time')
     ts = data.get('errors_timeseries', [])
     if ts:
-        # line_chart принимает dict: x -> y
         chart = {p['date']: p['errors'] for p in ts}
         st.line_chart(chart)
     else:
@@ -273,7 +324,7 @@ elif page == 'Stats':
     st.subheader('Errors by type')
     ebt = data.get('errors_by_type', [])
     if ebt:
-        chart = {p['type']: p['count'] for p in ebt}
+        chart = {_pretty_type(p.get('type')): p.get('count', 0) for p in ebt}
         st.bar_chart(chart)
     else:
         st.info('No errors_by_type data')
@@ -285,7 +336,7 @@ elif page == 'Stats':
     else:
         for a in ach:
             st.write(
-                f"✅ **{a.get('title', '')}** \
-                    (`{a.get('code', '')}`) — \
-                    {a.get('earned_at', '')}",
+                f"✅ **{a.get('title', '')}** (`{a.get('code', '')}`) — {a.get('earned_at', '')}",
             )
+
+    st.markdown('</div>', unsafe_allow_html=True)

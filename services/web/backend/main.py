@@ -25,10 +25,9 @@ AI_WORKER_URL = os.getenv(
     'AI_WORKER_URL', 'http://ai_worker_service:8001',
 ).rstrip('/')
 
-# username -> {code, expires_at}
 _pending_codes: dict[str, dict[str, Any]] = {}
-_user_tokens: dict[str, str] = {}  # token -> username
-_user_levels: dict[str, str] = {}  # username -> level
+_user_tokens: dict[str, str] = {}
+_user_levels: dict[str, str] = {}
 
 CODE_TTL_MIN = int(os.getenv('CODE_TTL_MIN', '10'))
 
@@ -41,8 +40,6 @@ def _make_code_5() -> str:
     return f"{random.randint(0, 99999):05d}"
 
 
-# async def _send_code_to_telegram_mock(username: str, code: str) -> None:
-
 
 @app.get('/api/health')
 def health():
@@ -50,7 +47,7 @@ def health():
 
 
 # -------------------------
-# MODELS: CHECK
+# классы: чекер
 # -------------------------
 class CheckRequest(BaseModel):
     text: str = Field(..., min_length=1)
@@ -71,7 +68,7 @@ class CheckResponse(BaseModel):
 
 
 # -------------------------
-# MODELS: AUTH
+# регистрация
 # -------------------------
 class AuthRequestCodeIn(BaseModel):
     tg_username: str = Field(..., min_length=3, max_length=64)
@@ -92,7 +89,7 @@ class AuthVerifyOut(BaseModel):
 
 
 # -------------------------
-# MODELS: SETTINGS
+# настройки
 # -------------------------
 class SettingsIn(BaseModel):
     level: str = Field(..., pattern=r'^(A1|A2|B1|B2|C1|C2)$')
@@ -104,10 +101,10 @@ class SettingsOut(BaseModel):
 
 
 # -------------------------
-# MODELS: STATS (новый контракт)
+# статистика
 # -------------------------
 class StatsTimePoint(BaseModel):
-    date: str      # YYYY-MM-DD
+    date: str
     errors: int
     messages: int
 
@@ -120,7 +117,7 @@ class StatsErrorsByTypePoint(BaseModel):
 class StatsAchievementItem(BaseModel):
     code: str
     title: str
-    earned_at: str  # YYYY-MM-DD
+    earned_at: str
 
 
 class StatsResponse(BaseModel):
@@ -134,7 +131,7 @@ class StatsResponse(BaseModel):
 
 
 # -------------------------
-# AUTH HELPERS
+# авторизация доп
 # -------------------------
 def _auth_username_from_header(authorization: str | None) -> str:
     if not authorization:
@@ -156,7 +153,7 @@ def _auth_username_from_header(authorization: str | None) -> str:
 
 
 # -------------------------
-# ENDPOINTS: CHECK (через ai_worker_stub)
+# эндпоинты: чекер
 # -------------------------
 @app.post('/api/check', response_model=CheckResponse)
 async def check(
@@ -165,7 +162,6 @@ async def check(
 ):
     username = _auth_username_from_header(authorization)
 
-    # если user сохранил level в Settings — используем ег
     data = await get_response(f'http://backend:8000/api/v1/users/{username}')
 
     payload = {'tg_id': data['tg_id'], 'text_original': req.text}
@@ -178,7 +174,6 @@ async def check(
     except requests.RequestException:
         raise HTTPException(status_code=502, detail='AI worker is unavailable')
 
-    # мягкий парсинг errors, чтобы не падать из-за одного плохого элемента
     errors_parsed: list[ErrorItem] = []
     for e in data.get('errors', []):
         try:
@@ -194,7 +189,7 @@ async def check(
 
 
 # -------------------------
-# ENDPOINTS: AUTH
+# авторизация
 # -------------------------
 @app.post('/api/auth/request-code', response_model=AuthRequestCodeOut)
 async def request_code(payload: AuthRequestCodeIn):
@@ -244,7 +239,7 @@ def verify_code(payload: AuthVerifyIn):
 
 
 # -------------------------
-# ENDPOINTS: SETTINGS
+# Эндпоинты: статистика
 # -------------------------
 @app.get('/api/settings', response_model=SettingsOut)
 async def get_settings(authorization: str | None = Header(default=None)):
@@ -271,7 +266,7 @@ async def set_settings(
 
 
 # -------------------------
-# ENDPOINTS: STATS (через ai_worker_stub)
+# Эндпоинты: статистика
 # -------------------------
 @app.get('/api/stats', response_model=StatsResponse)
 async def stats(
