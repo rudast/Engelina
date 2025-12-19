@@ -7,6 +7,7 @@ import streamlit as st
 
 API_BASE = os.getenv('BACKEND_API_URL', 'http://backend:8000').rstrip('/')
 
+
 st.set_page_config(page_title='English Text Checker', layout='centered')
 
 st.markdown(
