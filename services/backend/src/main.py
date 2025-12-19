@@ -15,6 +15,7 @@ from src.routers import admin
 from src.routers import auth
 from src.routers import health
 from src.routers import history
+from src.routers import leaderboard
 from src.routers import messages
 from src.routers import users
 
@@ -27,6 +28,7 @@ app.include_router(achievements.router)
 app.include_router(admin.router)
 app.include_router(auth.router)
 app.include_router(history.router)
+app.include_router(leaderboard.router)
 
 
 @app.on_event('startup')

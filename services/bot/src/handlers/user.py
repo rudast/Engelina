@@ -11,7 +11,11 @@ from aiogram.filters import CommandStart
 from aiogram.types import CallbackQuery
 from aiogram.types import Message
 from buttons.achievement import achievements_kb
+from buttons.leaderboard import leaderboard_kb
+from buttons.stats import link_keyboard
 from buttons.user import rate_beyboard
+from utils import format_daily_stats
+from utils import format_leaderboard
 from utils import get_response
 from utils import post_response
 
@@ -56,6 +60,7 @@ async def help_cmd(msg: Message):
     • Tell you more about the project
     • Guide you to the main website
     • View your achievements
+    • Follow leaderboard
 
 Commands:
     • /start — Restart the bot
@@ -63,6 +68,7 @@ Commands:
     • /about — About the project
     • /help — Show this help message
     • /achievements - Open your achievements
+    • /leaderboard - Show leaderboard by groups
         ''',
     )
 
@@ -70,11 +76,30 @@ Commands:
 @router.message(Command(commands='stats'))
 async def stats_cmd(msg: Message):
     await msg.delete()
+    username = msg.from_user.username or f"user_{msg.from_user.id}"
+
+    try:
+        stats = await get_response(f"http://backend:8000/api/v1/stats/?\
+                               tg_username={username}\
+                               &period=day")
+
+        if not stats:
+            raise ValueError('No data received')
+
+        text = format_daily_stats(stats)
+
+    except Exception as e:
+        logging.error(f"Stats fetch error: {str(e)}")
+        text = (
+            '⚠️ <b>Temporary issue loading stats</b>\n'
+            'Your data will be available shortly.\n\n'
+            '📊 Detailed statistics always available on the website:'
+        )
+
     await msg.answer(
-        '''
-        📊 Here is your personal statistics page:
-# TODO url
-        ''',  # TODO add url
+        text,
+        reply_markup=link_keyboard,
+        parse_mode='HTML',
     )
 
 
@@ -107,21 +132,20 @@ async def message(msg: Message):
     if res is None:
         return
 
-    text = ''
-    if res['answer'] != '':
-        text += f'''
-        Message from Engelina: {res['answer']}
-        '''
+    text_parts = []
 
-    if res['text_corrected'] != '':
-        text += f'''
-Corrected: {res['text_corrected']}
-        '''
+    if res['answer']:
+        text_parts.append(f"<b>Answer:</b>\n{res['answer']}")
 
-    if res['explanation'] != '':
-        text += f'''
-Explanation: {res['explanation']}
-        '''
+    if res['text_corrected']:
+        text_parts.append(
+            f"<b>Corrected:</b>\n<code>{res['text_corrected']}</code>",
+        )
+
+    if res['explanation']:
+        text_parts.append(f"<b>Explanation:</b>\n{res['explanation']}")
+
+    text = '\n\n'.join(text_parts)
 
     await msg.reply(text, reply_markup=rate_beyboard)
 
@@ -200,3 +224,56 @@ async def ach_callback(query: CallbackQuery):
             pass
 
         await query.answer()
+
+
+@router.message(Command(commands='leaderboard'))
+async def leaderboard_cmd(msg: Message):
+    category_index = 0
+    data = await get_response(
+        f'http://backend:8000/api/v1/leaderboard/{category_index}',
+    )
+
+    if data is None:
+        await msg.delete()
+        await msg.answer('🏆 Leaderboard temporarily unavailable. \
+                         Try again later.')
+        return
+
+    text = format_leaderboard(data)
+    await msg.delete()
+    await msg.answer(text, reply_markup=leaderboard_kb(category_index))
+
+
+@router.callback_query(lambda c: c.data.startswith('lb:'))
+async def leaderboard_callback(query: CallbackQuery):
+    parts = query.data.split(':')
+    action = parts[1]
+
+    if action == 'exit':
+        try:
+            await query.message.delete()
+        except Exception:
+            await query.message.edit_reply_markup(None)
+        await query.answer()
+        return
+
+    if action == 'goto':
+        new_index = int(parts[2])
+        data = await get_response(
+            f'http://backend:8000/api/v1/leaderboard/{new_index}',
+        )
+
+        if data is None:
+            await query.answer('⚠️ Data unavailable', show_alert=True)
+            return
+
+        text = format_leaderboard(data)
+        try:
+            await query.message.edit_text(
+                text,
+                reply_markup=leaderboard_kb(new_index),
+                parse_mode='HTML',
+            )
+        except TelegramBadRequest:
+            await query.answer()
+        return
